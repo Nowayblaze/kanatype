@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>kanatype</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main>
+    <h1>kanatype</h1>
+
+    <section id="practice">
+      <div id="kana" aria-live="polite">あ</div>
+      <input id="answer" type="text" placeholder="romaji" autocomplete="off" autocapitalize="off" spellcheck="false" autofocus>
+      <div id="feedback"></div>
+      <div id="score">0 / 0</div>
+    </section>
+
+    <section>
+      <h2>Rows</h2>
+      <div id="rows"></div>
+    </section>
+
+    <section>
+      <h2>Confidence</h2>
+      <div id="grid"></div>
+      <div class="legend">
+        <span class="swatch s-new"></span>not enough data
+        <span class="swatch s-low"></span>weak
+        <span class="swatch s-mid"></span>getting there
+        <span class="swatch s-high"></span>strong
+      </div>
+    </section>
+
+    <button id="reset">Reset progress</button>
+  </main>
+
+  <script src="kana.js"></script>
+  <script src="stats.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
