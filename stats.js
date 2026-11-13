@@ -42,6 +42,40 @@ function saveWords() {
 function getWordStat(w) {
   return wordStats[w] || { seen: 0, correct: 0, avgMs: 0, last: 0 };
 }
+// A word counts as "known" once the meaning check was passed on this many separate days.
+const KNOWN_DAYS = 3;
+
+function todayStr() {
+  const d = new Date();
+  return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+}
+function recordMeaningCheck(w, ok) {
+  const s = getWordStat(w);
+  s.checks = (s.checks || 0) + 1;
+  if (ok) {
+    s.passes = (s.passes || 0) + 1;
+    s.passDays = s.passDays || [];
+    const t = todayStr();
+    if (!s.passDays.includes(t)) s.passDays.push(t);
+  }
+  wordStats[w] = s;
+  saveWords();
+}
+function isKnown(w) {
+  const s = wordStats[w];
+  return !!s && (s.passDays || []).length >= KNOWN_DAYS;
+}
+function isStarred(w) {
+  return !!(wordStats[w] && wordStats[w].starred);
+}
+function toggleStar(w) {
+  const s = getWordStat(w);
+  s.starred = !s.starred;
+  wordStats[w] = s;
+  saveWords();
+  return s.starred;
+}
+
 function recordWord(w, ok, ms) {
   const s = getWordStat(w);
   s.seen++;

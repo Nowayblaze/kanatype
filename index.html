@@ -16,12 +16,15 @@
           <button type="button" role="tab" data-mode="kana">Kana</button>
           <button type="button" role="tab" data-mode="words">Words</button>
         </div>
+        <button id="nudge" type="button" hidden>Word mode unlocked &ndash; try reading real words</button>
+        <button id="star" type="button" hidden aria-label="Save this word" title="Save this word">&#9734;</button>
         <div id="kana-wrap">
           <div id="tip" role="tooltip" aria-live="polite"></div>
           <div id="kana" class="idle">かな</div>
         </div>
         <input id="answer" type="text" placeholder="Press Start" autocomplete="off" autocapitalize="off" spellcheck="false" disabled>
         <div id="feedback" role="status" aria-live="polite"></div>
+        <div id="choices" role="group" aria-label="Choose the meaning" hidden></div>
         <div class="controls">
           <button id="toggle" class="primary" type="button">Start</button>
           <span id="score">0 / 0</span>

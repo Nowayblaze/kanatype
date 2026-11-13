@@ -7,6 +7,10 @@ const scoreEl = document.getElementById("score");
 const toggleBtn = document.getElementById("toggle");
 const modeEl = document.getElementById("mode");
 const availEl = document.getElementById("avail");
+const choicesEl = document.getElementById("choices");
+const starEl = document.getElementById("star");
+const nudgeEl = document.getElementById("nudge");
+const togglesEl = document.querySelector(".toggles");
 const tabsEl = document.getElementById("tabs");
 const panelsEl = document.getElementById("panels");
 const groupEls = [...document.querySelectorAll(".toggles input")];
@@ -21,6 +25,8 @@ const SLOW_MS = 1500;         // a kana in a word slower than this gets an amber
 const MIN_WORDS = 5;          // words needed in the pool before Words mode can start
 const COOLDOWN = 20;          // a word is not repeated within this many words
 const LOCK_MSG = "Tick a few more columns to unlock words";
+const NUDGE_KEY = "kanatype.nudged";
+const MINE = "mine";          // id of the "Your words" tab (Words mode only)
 
 let selected = loadRows();
 let activeScript = loadScript();
@@ -38,7 +44,12 @@ let wstate = null;            // per-word progress: { n kana done, last timestam
 let holding = false, holdTimer = null;
 let sessionWords = 0, sessionMs = 0;
 let recent = [];
+// Meaning check: every 8-10 words, a quick 3-option "what does it mean?" after a correct word
+let checking = false, checkAnswered = false, checkOptions = [];
+let sinceCheck = 0, nextCheck = rollNextCheck();
+function rollNextCheck() { return 8 + Math.floor(Math.random() * 3); }
 
+const WORD_BY_W = Object.fromEntries(WORDS.map(x => [x.w, x]));
 const cells = new Map();      // kana -> table cell element
 const heads = new Map();      // row id -> column checkbox
 
@@ -59,6 +70,7 @@ function loadScript() {
   try {
     const s = localStorage.getItem(TAB_KEY);
     if (SCRIPTS.some(x => x.id === s)) return s;
+    if (s === MINE && loadMode() === "words") return s;
   } catch (e) {}
   return SCRIPTS[0].id;
 }
@@ -121,6 +133,67 @@ function buildTable() {
       });
     }
   });
+
+  // "Your words": third tab, only shown in Words mode
+  const mineTab = document.createElement("button");
+  mineTab.type = "button";
+  mineTab.setAttribute("role", "tab");
+  mineTab.dataset.script = MINE;
+  mineTab.addEventListener("click", () => setTab(MINE));
+  tabsEl.appendChild(mineTab);
+  const minePanel = document.createElement("div");
+  minePanel.className = "table-scroll mine";
+  minePanel.dataset.script = MINE;
+  panelsEl.appendChild(minePanel);
+}
+
+/* ---------- "Your words": words seen, known and saved ---------- */
+function renderMine() {
+  const panel = panelsEl.querySelector('[data-script="' + MINE + '"]');
+  const top = panel.scrollTop;
+  const items = Object.entries(wordStats)
+    .map(([w, s]) => ({ w, s, def: WORD_BY_W[w] }))
+    .filter(x => x.def && (x.s.seen > 0 || x.s.starred));
+  items.sort((a, b) => (b.s.starred ? 1 : 0) - (a.s.starred ? 1 : 0) || (b.s.last || 0) - (a.s.last || 0));
+  const seen = items.filter(x => x.s.seen > 0).length;
+  const known = items.filter(x => isKnown(x.w)).length;
+  const saved = items.filter(x => x.s.starred).length;
+  panel.innerHTML = "";
+  const summary = document.createElement("div");
+  summary.className = "mine-summary";
+  summary.innerHTML = "<span><b>" + seen + "</b> seen</span><span><b>" + known + "</b> known</span><span><b>" + saved + "</b> saved</span>";
+  panel.appendChild(summary);
+  if (!items.length) {
+    const empty = document.createElement("p");
+    empty.className = "mine-empty";
+    empty.textContent = "Words you complete will appear here with their meaning. Star the ones you want to keep reviewing.";
+    panel.appendChild(empty);
+  }
+  items.forEach(({ w, s, def }) => {
+    const row = document.createElement("div");
+    row.className = "mine-row";
+    const word = document.createElement("span");
+    word.className = "mw";
+    word.textContent = w;
+    if (def.k) { const k = document.createElement("small"); k.textContent = def.k; word.appendChild(k); }
+    const mean = document.createElement("span");
+    mean.className = "mm";
+    mean.textContent = def.m;
+    const meta = document.createElement("span");
+    meta.className = "ms";
+    meta.textContent = "seen " + s.seen;
+    const badge = document.createElement("span");
+    if (isKnown(w)) { badge.className = "known"; badge.textContent = "known"; }
+    const star = document.createElement("button");
+    star.type = "button";
+    star.className = "st" + (s.starred ? " on" : "");
+    star.textContent = s.starred ? "★" : "☆";
+    star.setAttribute("aria-label", (s.starred ? "Unsave " : "Save ") + w);
+    star.addEventListener("click", () => { toggleStar(w); updateStarUI(); renderMine(); });
+    row.append(word, mean, meta, badge, star);
+    panel.appendChild(row);
+  });
+  panel.scrollTop = top;
 }
 
 function groupRows(script, group) {
@@ -136,28 +209,59 @@ function updateTable() {
       cells.get(ch).className = "cell" + cls + (selected.has(r.id) ? "" : " off");
     });
   });
+  // "Your words" only exists in Words mode; fall back to a script tab otherwise
+  if (activeScript === MINE && mode !== "words") activeScript = lastScript;
   // tabs: label, selected state, and how many columns are ticked in that script
   tabsEl.querySelectorAll("button").forEach(tab => {
+    tab.setAttribute("aria-selected", tab.dataset.script === activeScript);
+    if (tab.dataset.script === MINE) {
+      const seen = Object.values(wordStats).filter(s => s.seen > 0).length;
+      tab.hidden = mode !== "words";
+      tab.innerHTML = "Your words" + (seen ? '<span class="badge">' + seen + "</span>" : "");
+      return;
+    }
     const s = SCRIPTS.find(x => x.id === tab.dataset.script);
     const n = s.rows.filter(r => selected.has(r.id)).length;
-    tab.setAttribute("aria-selected", s.id === activeScript);
     tab.innerHTML = s.label + (n ? '<span class="badge">' + n + "</span>" : "");
   });
   panelsEl.querySelectorAll(".table-scroll").forEach(p => { p.hidden = p.dataset.script !== activeScript; });
-  // All / Regular / Dakuten toggles act on the visible script
-  groupEls.forEach(cb => {
-    const rows = groupRows(activeScript, cb.dataset.group);
-    const n = rows.filter(r => selected.has(r.id)).length;
-    cb.checked = n === rows.length;
-    cb.indeterminate = n > 0 && n < rows.length;
-  });
+  if (activeScript === MINE) renderMine();
+  // All / Regular / Dakuten toggles act on the visible script (not on "Your words")
+  togglesEl.hidden = activeScript === MINE;
+  if (activeScript !== MINE) {
+    groupEls.forEach(cb => {
+      const rows = groupRows(activeScript, cb.dataset.group);
+      const n = rows.filter(r => selected.has(r.id)).length;
+      cb.checked = n === rows.length;
+      cb.indeterminate = n > 0 && n < rows.length;
+    });
+  }
+  updateNudge();
 }
 
+let lastScript = activeScript === MINE ? SCRIPTS[0].id : activeScript;
 function setTab(id) {
   activeScript = id;
+  if (id !== MINE) lastScript = id;
   try { localStorage.setItem(TAB_KEY, id); } catch (e) {}
   updateTable();
 }
+
+/* ---------- one-time "Word mode unlocked" hint ---------- */
+// Shown in Kana mode once about three columns are known at amber or better.
+function columnsAmberOrBetter() {
+  return ROWS.filter(r => r.kana.every(([ch]) => { const c = confidence(ch); return c !== null && c >= 0.5; })).length;
+}
+function nudgeSeen() {
+  try { return localStorage.getItem(NUDGE_KEY) === "1"; } catch (e) { return false; }
+}
+function markNudgeSeen() {
+  try { localStorage.setItem(NUDGE_KEY, "1"); } catch (e) {}
+}
+function updateNudge() {
+  nudgeEl.hidden = nudgeSeen() || mode !== "kana" || columnsAmberOrBetter() < 3;
+}
+nudgeEl.addEventListener("click", () => setMode("words"));
 
 function inPool(item) {
   return item.isWord ? item.rows.every(r => selected.has(r)) : selected.has(item.row);
@@ -218,10 +322,13 @@ function setMode(m) {
   if (running) stop();
   mode = m;
   try { localStorage.setItem(MODE_KEY, mode); } catch (e) {}
+  if (mode === "words") markNudgeSeen();               // they found Words mode, so no hint needed
+  if (mode === "kana" && activeScript === MINE) setTab(lastScript); // "Your words" is Words-mode only
   sessionCorrect = sessionTotal = sessionWords = sessionMs = 0;
   setFeedback("");
   renderScore();
   updateModeUI();
+  updateTable();
 }
 modeEl.querySelectorAll("button").forEach(b => b.addEventListener("click", () => setMode(b.dataset.mode)));
 
@@ -280,9 +387,99 @@ function setFeedback(text, info) {
   feedbackEl.classList.toggle("info", !!info);
 }
 
+// Clears the meaning-check and star UI (used when moving to the next word and on stop).
+function resetWordExtras() {
+  checking = false;
+  checkAnswered = false;
+  choicesEl.hidden = true;
+  choicesEl.innerHTML = "";
+  starEl.hidden = true;
+  if (running) {
+    answerEl.disabled = false;
+    answerEl.placeholder = "romaji";
+  }
+}
+
+// The usual kanji spelling, shown small beside the word once it has been answered.
+function appendKanji() {
+  if (!current.k || kanaEl.querySelector(".kanji")) return;
+  const kj = document.createElement("span");
+  kj.className = "kanji";
+  kj.textContent = current.k;
+  kanaEl.appendChild(kj);
+}
+
+function updateStarUI() {
+  if (!current || !current.isWord) return;
+  const on = isStarred(current.w);
+  starEl.classList.toggle("on", on);
+  starEl.textContent = on ? "★" : "☆";
+  starEl.title = on ? "Saved – click to unsave" : "Save this word";
+  starEl.setAttribute("aria-label", starEl.title);
+}
+starEl.addEventListener("click", () => {
+  if (!current || !current.isWord) return;
+  toggleStar(current.w);
+  updateStarUI();
+  if (activeScript === MINE) renderMine();
+  clearTimeout(holdTimer);   // they are interacting, so don't whisk the word away
+  updateTable();
+});
+
+/* ----- meaning check: retrieval practice every 8-10 words ----- */
+function shuffled(list) {
+  const a = list.slice();
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+function startMeaningCheck() {
+  checking = true;
+  checkAnswered = false;
+  // wrong options: meanings of other words you can read (fall back to any word)
+  const other = x => x.supported && x.m !== current.m;
+  let wrongs = [...new Set(shuffled(eligibleWords().filter(other)).map(x => x.m))];
+  if (wrongs.length < 2) wrongs = [...new Set(shuffled(WORDS.filter(other)).map(x => x.m))];
+  checkOptions = shuffled([current.m, ...wrongs.slice(0, 2)]);
+  choicesEl.innerHTML = "";
+  checkOptions.forEach((text, i) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.textContent = (i + 1) + ". " + text;
+    b.addEventListener("click", () => chooseOption(i));
+    choicesEl.appendChild(b);
+  });
+  choicesEl.hidden = false;
+  setFeedback("What does it mean?", true);
+  answerEl.disabled = true;
+  answerEl.placeholder = "";
+  answerEl.blur();
+}
+
+function chooseOption(i) {
+  if (!checking || checkAnswered || paused) return;
+  checkAnswered = true;
+  const ok = checkOptions[i] === current.m;
+  recordMeaningCheck(current.w, ok);
+  choicesEl.querySelectorAll("button").forEach((b, j) => {
+    b.disabled = true;
+    if (checkOptions[j] === current.m) b.classList.add("correct");
+    else if (j === i) b.classList.add("wrong");
+  });
+  setFeedback(ok ? "Correct – " + current.m : "It means “" + current.m + "” – press Enter to continue", ok);
+  appendKanji();
+  if (activeScript === MINE) renderMine();
+  updateTable();
+  holdTimer = setTimeout(advance, ok ? 1200 : 2600);
+}
+
 function showNext() {
   clearTimeout(holdTimer);
   holding = false;
+  resetWordExtras();
   if (mode === "words") {
     current = pickNextWord();
     current.isWord = true;
@@ -432,13 +629,21 @@ function acceptWord() {
   answerEl.classList.remove("wrong");
   answerEl.classList.add("right");
   hideTip(true);
-  setFeedback(current.m, true);
-  if (current.k) {
-    const kj = document.createElement("span");
-    kj.className = "kanji";
-    kj.textContent = current.k;
-    kanaEl.appendChild(kj);
+  starEl.hidden = false;
+  updateStarUI();
+  if (activeScript === MINE) renderMine();
+  // Every 8-10 words, ask for the meaning instead of showing it (needs enough words for options).
+  // The kanji spelling is held back too, since it could give the meaning away.
+  sinceCheck++;
+  if (sinceCheck >= nextCheck && WORDS.filter(x => x.supported).length >= 3) {
+    sinceCheck = 0;
+    nextCheck = rollNextCheck();
+    startMeaningCheck();
+    return;
   }
+  // Otherwise hold the finished word with its meaning; Enter, a keystroke or a timer moves on.
+  appendKanji();
+  setFeedback(current.m, true);
   holding = true;
   holdTimer = setTimeout(advance, WORD_HOLD_MS);
 }
@@ -488,7 +693,7 @@ function classify(val) {
 }
 
 answerEl.addEventListener("input", () => {
-  if (!running || paused) return;
+  if (!running || paused || checking) return;
   if (holding) {            // typing during the hold starts the next word; this keystroke is its first letter
     const typed = answerEl.value;
     advance();
@@ -504,10 +709,21 @@ answerEl.addEventListener("input", () => {
   else answerEl.classList.remove("wrong"); // still typing something that could be right
 });
 answerEl.addEventListener("keydown", e => { if (e.key === "Enter" && holding) advance(); });
+// Meaning check keys: 1-3 pick an option, Enter moves on after answering
+document.addEventListener("keydown", e => {
+  if (!running || paused || !checking) return;
+  if (!checkAnswered && ["1", "2", "3"].includes(e.key) && checkOptions[+e.key - 1] !== undefined) {
+    e.preventDefault();
+    chooseOption(+e.key - 1);
+  } else if (checkAnswered && e.key === "Enter") {
+    e.preventDefault();
+    advance();
+  }
+});
 
 /* hover (or tap) the kana to reveal the answer; counts as a miss */
 function reveal(pin) {
-  if (!running || !current || paused || holding) return;
+  if (!running || !current || paused || holding || checking) return;
   if (!missedThis) {
     if (current.isWord) {
       missedThis = true;
@@ -535,6 +751,8 @@ function start() {
   practiceEl.classList.remove("paused");
   sessionCorrect = sessionTotal = sessionWords = sessionMs = 0;
   recent = [];
+  sinceCheck = 0;
+  nextCheck = rollNextCheck();
   renderScore();
   toggleBtn.textContent = "Stop";
   toggleBtn.classList.add("stop");
@@ -552,6 +770,7 @@ function stop() {
   paused = false;
   holding = false;
   clearTimeout(holdTimer);
+  resetWordExtras();
   practiceEl.classList.remove("paused");
   clearTimeout(hoverTimer);
   toggleBtn.textContent = "Start";
@@ -598,7 +817,8 @@ function resume() {
   shownAt += away;
   if (wstate) wstate.last += away;
   practiceEl.classList.remove("paused");
-  if (holding) advance(); else answerEl.focus();
+  if (holding || (checking && checkAnswered)) advance();
+  else if (!checking) answerEl.focus();
 }
 document.addEventListener("mousedown", e => { if (running && !paused && !practiceEl.contains(e.target)) pause(); });
 window.addEventListener("blur", pause);
@@ -622,3 +842,4 @@ buildTable();
 updateTable();
 updateModeUI();
 renderScore();
+updateNudge();
