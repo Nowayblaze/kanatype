@@ -21,6 +21,35 @@ function saveStats() {
 function resetStats() {
   stats = {};
   saveStats();
+  wordStats = {};
+  saveWords();
+}
+
+/* ---------- per-word records (separate from per-kana confidence) ---------- */
+const WORDS_KEY = "kanatype.words";
+let wordStats = loadWords();
+
+function loadWords() {
+  try {
+    const raw = localStorage.getItem(WORDS_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch (e) {}
+  return {};
+}
+function saveWords() {
+  try { localStorage.setItem(WORDS_KEY, JSON.stringify(wordStats)); } catch (e) {}
+}
+function getWordStat(w) {
+  return wordStats[w] || { seen: 0, correct: 0, avgMs: 0, last: 0 };
+}
+function recordWord(w, ok, ms) {
+  const s = getWordStat(w);
+  s.seen++;
+  if (ok) s.correct++;
+  s.avgMs = s.avgMs ? s.avgMs * 0.7 + ms * 0.3 : ms;
+  s.last = Date.now();
+  wordStats[w] = s;
+  saveWords();
 }
 
 function getStat(ch) {

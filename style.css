@@ -25,9 +25,26 @@ section { background: var(--panel); border-radius: 8px; padding: 16px; margin-bo
   width: max-content; max-width: 90%; white-space: normal; }
 #resume:hover, #resume:focus-visible { border-color: var(--accent); outline: none; }
 #practice.paused #resume { display: block; }
-#kana-wrap { position: relative; width: fit-content; margin: 40px auto 0; }
+#kana-wrap { position: relative; width: fit-content; max-width: 100%; margin: 40px auto 0; }
 #kana { font-size: 6.6rem; line-height: 1.2; cursor: help; user-select: none; }
 #kana.idle { opacity: .3; cursor: default; }
+
+/* Kana | Words mode switch, styled like the Hiragana/Katakana tabs */
+#mode { display: flex; gap: 4px; justify-content: center; }
+#mode button { background: var(--bg); color: var(--muted); border: 1px solid transparent; padding: 6px 18px; font-weight: 600; }
+#mode button[aria-selected="true"] { color: var(--text); border-color: var(--accent); }
+#mode button:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+
+/* Words mode: whole word, smaller, with a per-kana underline showing how each one went */
+#kana.word { font-size: 4.4rem; line-height: 1.35; white-space: normal; overflow-wrap: anywhere; }
+#kana .seg { display: inline-block; padding: 0 .03em; border-bottom: 4px solid transparent; transition: border-color .12s, background .12s; }
+#kana .seg.cur { background: rgba(74,143,224,.16); border-bottom-color: rgba(74,143,224,.55); }
+#kana .seg.fast { border-bottom-color: var(--good); }
+#kana .seg.slow { border-bottom-color: var(--mid); }
+#kana .seg.bad { border-bottom-color: var(--bad); }
+#kana .kanji { font-size: 1.4rem; color: var(--muted); margin-left: .7em; }
+.avail { margin: 10px 0 0; }
+.primary:disabled { opacity: .4; cursor: not-allowed; }
 
 /* speech-bubble tooltip above the kana, showing the answer */
 #tip { position: absolute; bottom: 100%; left: 50%; transform: translate(-50%, 4px);
@@ -50,7 +67,7 @@ section { background: var(--panel); border-radius: 8px; padding: 16px; margin-bo
 #feedback { min-height: 1.5rem; margin-top: 8px; color: var(--bad); font-size: .95rem; }
 #feedback.info { color: var(--muted); }
 .controls { display: flex; align-items: center; justify-content: center; gap: 16px; margin-top: 8px; }
-#score { color: var(--muted); font-size: .9rem; min-width: 4rem; }
+#score { color: var(--muted); font-size: .9rem; min-width: 4rem; white-space: nowrap; }
 
 button { font: inherit; cursor: pointer; border-radius: 6px; }
 .primary { background: var(--accent); color: #fff; border: none; padding: 8px 28px; font-weight: 600; }

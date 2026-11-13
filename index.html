@@ -12,6 +12,10 @@
 
     <div class="layout">
       <section id="practice">
+        <div id="mode" role="tablist" aria-label="Practice mode">
+          <button type="button" role="tab" data-mode="kana">Kana</button>
+          <button type="button" role="tab" data-mode="words">Words</button>
+        </div>
         <div id="kana-wrap">
           <div id="tip" role="tooltip" aria-live="polite"></div>
           <div id="kana" class="idle">かな</div>
@@ -36,6 +40,7 @@
           </div>
         </div>
         <div id="panels"></div>
+        <p id="avail" class="hint avail" hidden></p>
         <p class="hint">Tick columns to practice them &ndash; you can mix hiragana and katakana. Colours show how well you know each kana.</p>
         <div class="legend">
           <span class="swatch s-new"></span>not enough data
@@ -50,6 +55,7 @@
   </main>
 
   <script src="kana.js"></script>
+  <script src="words.js"></script>
   <script src="stats.js"></script>
   <script src="app.js"></script>
 </body>

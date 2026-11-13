@@ -43,3 +43,4 @@ const SCRIPTS = [
 
 const ROWS = SCRIPTS.flatMap(s => s.rows);
 const ALL_KANA = ROWS.flatMap(r => r.kana.map(([ch, ...answers]) => ({ ch, answers, row: r.id, romaji: answers[0] })));
+const KANA_BY_CH = Object.fromEntries(ALL_KANA.map(k => [k.ch, k]));
