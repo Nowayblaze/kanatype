@@ -90,6 +90,7 @@ section { background: var(--panel); border-radius: 8px; padding: 16px; margin-bo
 #answer:disabled { opacity: .5; }
 #answer.wrong { border-color: var(--bad); background: rgba(239,107,119,.12); animation: shake .3s; }
 #answer.right { animation: flash .35s; }
+#answer.ok { border-color: var(--good); background: rgba(79,179,106,.12); }   /* Words: correct answer typed */
 @keyframes shake { 0%,100% { transform: translateX(0); } 25% { transform: translateX(-6px); } 75% { transform: translateX(6px); } }
 @keyframes flash { from { border-color: var(--good); background: rgba(79,179,106,.2); } to { border-color: #444; background: var(--bg); } }
 

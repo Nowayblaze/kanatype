@@ -7,6 +7,7 @@ const scoreEl = document.getElementById("score");
 const toggleBtn = document.getElementById("toggle");
 const modeEl = document.getElementById("mode");
 const availEl = document.getElementById("avail");
+const hintEl = document.getElementById("practice-hint");
 const choicesEl = document.getElementById("choices");
 const starEl = document.getElementById("star");
 const nudgeEl = document.getElementById("nudge");
@@ -35,6 +36,7 @@ let current = null;           // kana item {ch, answers, romaji, row} or word it
 let shownAt = 0;
 let missedThis = false;       // a miss (wrong answer or revealed answer) was already recorded for this item
 let lockUntil = 0, lockedValue = "";
+let holdValue = "";           // what the box shows while a finished word waits for Enter
 let hoverTimer = null;
 let sessionCorrect = 0, sessionTotal = 0;
 // Words mode state
@@ -304,6 +306,9 @@ function updateModeUI() {
     availEl.textContent = n + (n === 1 ? " word" : " words") + " available with your selection" +
       (n < SUPPORTED_WORD_COUNT ? " · tick more columns to unlock more" : "");
   }
+  hintEl.textContent = isWords
+    ? "Type the word in romaji. Press Enter if you don't know it to see the answer, and Enter again for the next word. Hover the word to peek (counts as a miss). Esc stops."
+    : "Hover over the kana to reveal the answer (it counts as a miss). Press Esc to stop.";
   const locked = isWords && n < MIN_WORDS;
   toggleBtn.disabled = locked && !running;
   if (!running) {
@@ -472,7 +477,7 @@ function showNext() {
     current = pickNextWord();
     current.isWord = true;
     current.ch = current.w;
-    wstate = { n: 0, last: performance.now(), ms: [], failed: -1, revealed: false };
+    wstate = { n: 0, last: performance.now(), ms: [], revealed: false };
     renderWord();
   } else {
     current = pickNext();
@@ -480,7 +485,7 @@ function showNext() {
     kanaEl.textContent = current.ch;
   }
   answerEl.value = "";
-  answerEl.classList.remove("wrong", "right");
+  answerEl.classList.remove("wrong", "right", "ok");
   hideTip(true);
   setFeedback("");
   missedThis = false;
@@ -569,6 +574,9 @@ function acceptKana() {
   answerEl.classList.add("right");
 }
 
+// Words are not judged while you type. A correct answer turns the box green and ends the turn;
+// Enter with an empty or wrong answer gives up and shows the answer. Either way the word stays on
+// screen with its meaning until Enter is pressed again.
 function acceptWord() {
   const now = performance.now();
   const total = current.kana.length;
@@ -577,26 +585,19 @@ function acceptWord() {
     wstate.last = now;
     wstate.n++;
   }
-  const ok = !missedThis;
+  const ok = !missedThis;               // false if the answer was peeked at by hovering
   if (ok) { sessionTotal++; sessionCorrect++; }
-  // One result per kana: the one that went wrong already got its miss; the others get a correct.
-  // Kana after the mistake weren't really attempted, so they get a neutral time. If the answer was
-  // revealed, no kana credit is given.
-  if (!wstate.revealed) {
-    current.kana.forEach((e, i) => {
-      if (i === wstate.failed) return;
-      recordResult(e.ch, true, wstate.failed >= 0 && i > wstate.failed ? TARGET_MS : wstate.ms[i]);
-    });
-  }
+  // Every kana in the word gets a correct, unless the answer was revealed first (no credit then).
+  if (!wstate.revealed) current.kana.forEach((e, i) => recordResult(e.ch, true, wstate.ms[i]));
   const took = now - shownAt;
   recordWord(current.w, ok, took);
   sessionWords++;
   sessionMs += took;
   renderScore();
   updateTable();
-  answerEl.value = "";
   answerEl.classList.remove("wrong");
-  answerEl.classList.add("right");
+  answerEl.classList.add("ok");         // green outline
+  holdValue = answerEl.value;
   hideTip(true);
   starEl.hidden = false;
   updateStarUI();
@@ -611,26 +612,58 @@ function acceptWord() {
     startMeaningCheck();
     return;
   }
-  // Otherwise keep the finished word on screen with its meaning until Enter is pressed,
-  // so there is time to read it.
+  setFeedback(meaningLine() + "  ·  press Enter for the next word", true);
+  holding = true;
+}
+
+// Enter with nothing typed, or a wrong/unfinished answer: the learner doesn't know it, so show the
+// answer and meaning. Kana typed correctly before the point of failure get credit, the kana where it
+// went wrong gets a miss, and the rest are left alone. An empty answer changes no kana stats.
+function giveUpWord() {
+  if (!running || paused || checking || holding || !current || !current.isWord) return;
+  const val = answerEl.value.trim().toLowerCase();
+  const now = performance.now();
+  const total = current.kana.length;
+  if (val) wordProgress(val);
+  if (!missedThis) { missedThis = true; sessionTotal++; }
+  if (val && !wstate.revealed) {
+    const failed = Math.min(parseWord(current, val).done, total - 1);
+    current.kana.forEach((e, i) => {
+      if (i < failed) recordResult(e.ch, true, wstate.ms[i]);
+      else if (i === failed) recordResult(e.ch, false, now - wstate.last);
+    });
+  }
+  const took = now - shownAt;
+  recordWord(current.w, false, took);
+  sessionMs += took;
+  renderScore();
+  updateTable();
+  holdValue = answerEl.value;
+  answerEl.classList.remove("ok", "wrong");
+  void answerEl.offsetWidth;
+  answerEl.classList.add("wrong");      // red outline
+  showTip(true);                        // the answer, in the bubble above the word
+  answerEl.placeholder = "Press Enter";
+  starEl.hidden = false;
+  updateStarUI();
+  if (activeScript === MINE) renderMine();
   setFeedback(meaningLine() + "  ·  press Enter for the next word", true);
   holding = true;
 }
 
 function accept() { current.isWord ? acceptWord() : acceptKana(); }
 
-function flashWrong(soft) {
-  // restart the red/shake animation
+function flashWrong() {
+  // restart the red/shake animation, then briefly ignore keystrokes so fast typists don't overshoot
   answerEl.classList.remove("wrong");
   void answerEl.offsetWidth;
   answerEl.classList.add("wrong");
-  if (soft) return;   // words: keep the text and keep typing; use Backspace to fix
-  // single kana: briefly ignore keystrokes so fast typists don't overshoot, then select for retyping
   lockedValue = answerEl.value;
   lockUntil = performance.now() + LOCK_MS;
   setTimeout(() => { if (running && answerEl.classList.contains("wrong")) answerEl.select(); }, LOCK_MS);
 }
 
+// Single kana are judged as you type: the first wrong letter marks it wrong and shows the answer.
 function rejectKana(val) {
   markMiss();
   showAnswer();
@@ -640,22 +673,6 @@ function rejectKana(val) {
   flashWrong();
 }
 
-function rejectWord(val) {
-  const p = parseWord(current, val);
-  if (wstate.failed < 0) {
-    wstate.failed = Math.min(p.done, current.kana.length - 1);
-    if (!missedThis) { missedThis = true; sessionTotal++; renderScore(); }
-    recordResult(current.kana[wstate.failed].ch, false, performance.now() - wstate.last);
-    updateTable();
-  }
-  showTip(true);
-  const bad = current.kana[wstate.failed];
-  setFeedback("✕ " + bad.ch + " is " + bad.romaji + "  ·  fix it with Backspace");
-  flashWrong(true);
-}
-
-function reject(val) { current.isWord ? rejectWord(val) : rejectKana(val); }
-
 function classify(val) {
   if (current.answers.includes(val)) return "right";
   if (current.answers.some(a => a.startsWith(val))) return "partial";
@@ -664,8 +681,8 @@ function classify(val) {
 
 answerEl.addEventListener("input", e => {
   if (!running || paused || checking || e.isComposing) return;
-  if (holding) {            // the finished word stays until Enter; ignore stray typing meanwhile
-    answerEl.value = "";
+  if (holding) {            // the finished word stays until Enter; the box can't be edited meanwhile
+    answerEl.value = holdValue;
     return;
   }
   // A Japanese keyboard/IME turns letters into kana; answers are typed as romaji letters.
@@ -677,14 +694,21 @@ answerEl.addEventListener("input", e => {
   const val = answerEl.value.trim().toLowerCase();
   if (!val) { answerEl.classList.remove("wrong"); return; }
   const result = classify(val);
-  if (current.isWord) wordProgress(val);
+  if (current.isWord) {
+    // Words: never judged while typing. Only an exactly correct answer does anything (green, turn over).
+    wordProgress(val);
+    if (result === "right") accept();
+    return;
+  }
   if (result === "right") accept();
-  else if (result === "wrong") {
-    // words stay red while the text is wrong; only react the moment it first goes wrong
-    if (!(current.isWord && answerEl.classList.contains("wrong"))) reject(val);
-  } else answerEl.classList.remove("wrong"); // still typing something that could be right
+  else if (result === "wrong") rejectKana(val);
+  else answerEl.classList.remove("wrong"); // still typing something that could be right
 });
-answerEl.addEventListener("keydown", e => { if (e.key === "Enter" && holding) advance(); });
+answerEl.addEventListener("keydown", e => {
+  if (e.key !== "Enter") return;
+  if (holding) advance();                                              // read the answer, then next word
+  else if (running && mode === "words") giveUpWord();                  // empty or wrong answer: show it
+});
 // Meaning check keys: 1-3 pick an option, Enter moves on after answering
 document.addEventListener("keydown", e => {
   if (!running || paused || !checking) return;
@@ -709,7 +733,8 @@ function reveal(pin) {
     } else {
       markMiss();
     }
-    setFeedback("Answer revealed – counts as a miss. Type it to continue", true);
+    setFeedback(current.isWord ? "Answer revealed – counts as a miss. Type it, or press Enter to skip"
+                               : "Answer revealed – counts as a miss. Type it to continue", true);
   }
   showTip(pin);
 }
@@ -753,7 +778,7 @@ function stop() {
   toggleBtn.classList.remove("stop");
   hideTip(true);
   answerEl.value = "";
-  answerEl.classList.remove("wrong", "right");
+  answerEl.classList.remove("wrong", "right", "ok");
   answerEl.disabled = true;
   answerEl.placeholder = "Press Start";
   if (mode === "words" && sessionWords > 0) {
