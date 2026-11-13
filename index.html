@@ -11,20 +11,26 @@
     <h1>kanatype</h1>
 
     <section id="practice">
-      <div id="kana" aria-live="polite">あ</div>
-      <input id="answer" type="text" placeholder="romaji" autocomplete="off" autocapitalize="off" spellcheck="false" autofocus>
-      <div id="feedback"></div>
-      <div id="score">0 / 0</div>
+      <div id="kana-wrap">
+        <div id="tip" role="tooltip" aria-live="polite"></div>
+        <div id="kana" class="idle">かな</div>
+      </div>
+      <input id="answer" type="text" placeholder="Press Start" autocomplete="off" autocapitalize="off" spellcheck="false" disabled>
+      <div id="feedback" role="status" aria-live="polite"></div>
+      <div class="controls">
+        <button id="toggle" class="primary" type="button">Start</button>
+        <span id="score">0 / 0</span>
+      </div>
+      <p class="hint">Hover over the kana to reveal the answer (it counts as a miss). Press Esc to stop.</p>
     </section>
 
     <section>
-      <h2>Rows</h2>
-      <div id="rows"></div>
-    </section>
-
-    <section>
-      <h2>Confidence</h2>
-      <div id="grid"></div>
+      <div class="table-head">
+        <h2>Kana</h2>
+        <label class="all"><input type="checkbox" id="all"> All</label>
+      </div>
+      <p class="hint">Tick a column to practice it. Colours show how well you know each kana.</p>
+      <div class="table-scroll"><div id="table"></div></div>
       <div class="legend">
         <span class="swatch s-new"></span>not enough data
         <span class="swatch s-low"></span>weak
@@ -33,7 +39,7 @@
       </div>
     </section>
 
-    <button id="reset">Reset progress</button>
+    <button id="reset" type="button">Reset progress</button>
   </main>
 
   <script src="kana.js"></script>
