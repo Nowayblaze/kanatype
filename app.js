@@ -20,7 +20,6 @@ const TAB_KEY = "kanatype.tab";
 const MODE_KEY = "kanatype.mode";
 const LOCK_MS = 450;          // after a wrong answer, ignore keystrokes so fast typers don't overshoot
 const HOVER_REVEAL_MS = 350;  // hover delay before the answer is revealed (avoids accidental reveals)
-const WORD_HOLD_MS = 1500;    // how long a finished word (and its meaning) stays before the next one
 const SLOW_MS = 1500;         // a kana in a word slower than this gets an amber underline
 const MIN_WORDS = 5;          // words needed in the pool before Words mode can start
 const COOLDOWN = 20;          // a word is not repeated within this many words
@@ -469,11 +468,10 @@ function chooseOption(i) {
     if (checkOptions[j] === current.m) b.classList.add("correct");
     else if (j === i) b.classList.add("wrong");
   });
-  setFeedback(ok ? "Correct – " + current.m : "It means “" + current.m + "” – press Enter to continue", ok);
+  setFeedback((ok ? "Correct – " + current.m : "It means “" + current.m + "”") + "  ·  press Enter for the next word", ok);
   appendKanji();
   if (activeScript === MINE) renderMine();
   updateTable();
-  holdTimer = setTimeout(advance, ok ? 1200 : 2600);
 }
 
 function showNext() {
@@ -641,11 +639,11 @@ function acceptWord() {
     startMeaningCheck();
     return;
   }
-  // Otherwise hold the finished word with its meaning; Enter, a keystroke or a timer moves on.
+  // Otherwise keep the finished word on screen with its meaning until Enter is pressed,
+  // so there is time to read it.
   appendKanji();
-  setFeedback(current.m, true);
+  setFeedback(current.m + "  ·  press Enter for the next word", true);
   holding = true;
-  holdTimer = setTimeout(advance, WORD_HOLD_MS);
 }
 
 function accept() { current.isWord ? acceptWord() : acceptKana(); }
@@ -694,10 +692,9 @@ function classify(val) {
 
 answerEl.addEventListener("input", () => {
   if (!running || paused || checking) return;
-  if (holding) {            // typing during the hold starts the next word; this keystroke is its first letter
-    const typed = answerEl.value;
-    advance();
-    answerEl.value = typed;
+  if (holding) {            // the finished word stays until Enter; ignore stray typing meanwhile
+    answerEl.value = "";
+    return;
   }
   if (performance.now() < lockUntil) { answerEl.value = lockedValue; return; }
   const val = answerEl.value.trim().toLowerCase();
@@ -817,8 +814,7 @@ function resume() {
   shownAt += away;
   if (wstate) wstate.last += away;
   practiceEl.classList.remove("paused");
-  if (holding || (checking && checkAnswered)) advance();
-  else if (!checking) answerEl.focus();
+  if (!checking) answerEl.focus();
 }
 document.addEventListener("mousedown", e => { if (running && !paused && !practiceEl.contains(e.target)) pause(); });
 window.addEventListener("blur", pause);
