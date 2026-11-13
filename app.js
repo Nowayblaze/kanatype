@@ -20,7 +20,6 @@ const TAB_KEY = "kanatype.tab";
 const MODE_KEY = "kanatype.mode";
 const LOCK_MS = 450;          // after a wrong answer, ignore keystrokes so fast typers don't overshoot
 const HOVER_REVEAL_MS = 350;  // hover delay before the answer is revealed (avoids accidental reveals)
-const SLOW_MS = 1500;         // a kana in a word slower than this gets an amber underline
 const MIN_WORDS = 5;          // words needed in the pool before Words mode can start
 const COOLDOWN = 20;          // a word is not repeated within this many words
 const LOCK_MSG = "Tick a few more columns to unlock words";
@@ -399,15 +398,6 @@ function resetWordExtras() {
   }
 }
 
-// The usual kanji spelling, shown small beside the word once it has been answered.
-function appendKanji() {
-  if (!current.k || kanaEl.querySelector(".kanji")) return;
-  const kj = document.createElement("span");
-  kj.className = "kanji";
-  kj.textContent = current.k;
-  kanaEl.appendChild(kj);
-}
-
 function updateStarUI() {
   if (!current || !current.isWord) return;
   const on = isStarred(current.w);
@@ -454,7 +444,7 @@ function startMeaningCheck() {
   choicesEl.hidden = false;
   setFeedback("What does it mean?", true);
   answerEl.disabled = true;
-  answerEl.placeholder = "";
+  answerEl.placeholder = "Pick 1, 2 or 3";
   answerEl.blur();
 }
 
@@ -468,8 +458,8 @@ function chooseOption(i) {
     if (checkOptions[j] === current.m) b.classList.add("correct");
     else if (j === i) b.classList.add("wrong");
   });
-  setFeedback((ok ? "Correct – " + current.m : "It means “" + current.m + "”") + "  ·  press Enter for the next word", ok);
-  appendKanji();
+  setFeedback((ok ? "Correct – " : "It means ") + meaningLine() + "  ·  press Enter for the next word", ok);
+  answerEl.placeholder = "Press Enter";
   if (activeScript === MINE) renderMine();
   updateTable();
 }
@@ -504,31 +494,15 @@ function advance() {
   answerEl.focus();
 }
 
-/* ----- word display: one span per kana so each can carry its own underline ----- */
+/* ----- word display: plain text, one fixed size for every word ----- */
 function renderWord() {
   kanaEl.classList.add("word");
-  kanaEl.innerHTML = "";
-  [...current.w].forEach(ch => {
-    const s = document.createElement("span");
-    s.className = "seg";
-    s.textContent = ch;
-    kanaEl.appendChild(s);
-  });
-  renderSegs();
+  kanaEl.textContent = current.w;
 }
 
-// green = quick, amber = slow, red = the kana where the mistake was made, blue = the kana you're on
-function renderSegs() {
-  if (!wstate || !current || !current.isWord) return;
-  kanaEl.querySelectorAll(".seg").forEach((el, i) => {
-    let c = "seg";
-    if (i < wstate.n) c += i === wstate.failed ? " bad" : (wstate.ms[i] <= SLOW_MS ? " fast" : " slow");
-    else {
-      if (i === wstate.n) c += " cur";
-      if (i === wstate.failed) c += " bad";
-    }
-    el.className = c;
-  });
+// "猫 · cat": the usual kanji spelling (if any) and the meaning, shown after the word is answered
+function meaningLine() {
+  return (current.k ? current.k + "  ·  " : "") + current.m;
 }
 
 // How far through the word is `val`? done = kana fully typed. If `val` can't be the start of any
@@ -557,7 +531,6 @@ function wordProgress(val) {
     wstate.last = now;
     wstate.n++;
   }
-  renderSegs();
 }
 
 // Record at most one result per kana shown: the first wrong answer or reveal counts as the miss.
@@ -621,8 +594,6 @@ function acceptWord() {
   sessionMs += took;
   renderScore();
   updateTable();
-  renderSegs();
-  // Hold the finished word on screen with its meaning; Enter, a keystroke or a timer moves on.
   answerEl.value = "";
   answerEl.classList.remove("wrong");
   answerEl.classList.add("right");
@@ -633,6 +604,7 @@ function acceptWord() {
   // Every 8-10 words, ask for the meaning instead of showing it (needs enough words for options).
   // The kanji spelling is held back too, since it could give the meaning away.
   sinceCheck++;
+  answerEl.placeholder = "Press Enter";
   if (sinceCheck >= nextCheck && WORDS.filter(x => x.supported).length >= 3) {
     sinceCheck = 0;
     nextCheck = rollNextCheck();
@@ -641,18 +613,19 @@ function acceptWord() {
   }
   // Otherwise keep the finished word on screen with its meaning until Enter is pressed,
   // so there is time to read it.
-  appendKanji();
-  setFeedback(current.m + "  ·  press Enter for the next word", true);
+  setFeedback(meaningLine() + "  ·  press Enter for the next word", true);
   holding = true;
 }
 
 function accept() { current.isWord ? acceptWord() : acceptKana(); }
 
-function flashWrong() {
-  // restart the red/shake animation, then briefly ignore keystrokes so fast typists don't overshoot
+function flashWrong(soft) {
+  // restart the red/shake animation
   answerEl.classList.remove("wrong");
   void answerEl.offsetWidth;
   answerEl.classList.add("wrong");
+  if (soft) return;   // words: keep the text and keep typing; use Backspace to fix
+  // single kana: briefly ignore keystrokes so fast typists don't overshoot, then select for retyping
   lockedValue = answerEl.value;
   lockUntil = performance.now() + LOCK_MS;
   setTimeout(() => { if (running && answerEl.classList.contains("wrong")) answerEl.select(); }, LOCK_MS);
@@ -675,11 +648,10 @@ function rejectWord(val) {
     recordResult(current.kana[wstate.failed].ch, false, performance.now() - wstate.last);
     updateTable();
   }
-  renderSegs();
   showTip(true);
   const bad = current.kana[wstate.failed];
-  setFeedback("✕ " + bad.ch + " is " + bad.romaji + ". Type the whole word: " + current.romaji);
-  flashWrong();
+  setFeedback("✕ " + bad.ch + " is " + bad.romaji + "  ·  fix it with Backspace");
+  flashWrong(true);
 }
 
 function reject(val) { current.isWord ? rejectWord(val) : rejectKana(val); }
@@ -690,11 +662,16 @@ function classify(val) {
   return "wrong";
 }
 
-answerEl.addEventListener("input", () => {
-  if (!running || paused || checking) return;
+answerEl.addEventListener("input", e => {
+  if (!running || paused || checking || e.isComposing) return;
   if (holding) {            // the finished word stays until Enter; ignore stray typing meanwhile
     answerEl.value = "";
     return;
+  }
+  // A Japanese keyboard/IME turns letters into kana; answers are typed as romaji letters.
+  if (/[^\x00-\x7f]/.test(answerEl.value)) {
+    answerEl.value = answerEl.value.replace(/[^\x00-\x7f]/g, "");
+    setFeedback("Switch your keyboard to English input and type romaji letters", true);
   }
   if (performance.now() < lockUntil) { answerEl.value = lockedValue; return; }
   const val = answerEl.value.trim().toLowerCase();
@@ -702,8 +679,10 @@ answerEl.addEventListener("input", () => {
   const result = classify(val);
   if (current.isWord) wordProgress(val);
   if (result === "right") accept();
-  else if (result === "wrong") reject(val);
-  else answerEl.classList.remove("wrong"); // still typing something that could be right
+  else if (result === "wrong") {
+    // words stay red while the text is wrong; only react the moment it first goes wrong
+    if (!(current.isWord && answerEl.classList.contains("wrong"))) reject(val);
+  } else answerEl.classList.remove("wrong"); // still typing something that could be right
 });
 answerEl.addEventListener("keydown", e => { if (e.key === "Enter" && holding) advance(); });
 // Meaning check keys: 1-3 pick an option, Enter moves on after answering

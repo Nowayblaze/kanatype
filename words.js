@@ -409,12 +409,15 @@ const WORD_DATA = [
 // `alts`     - accepted romaji for each kana (ん also accepts "nn", needed before vowels and y)
 // `answers`  - every accepted full spelling (all combinations of the per-kana alternatives)
 // `rows`     - the table columns the word needs, used to decide if it is eligible
+const WA_GREETINGS = new Set(["こんにちは", "こんばんは"]);
 const WORDS = WORD_DATA.map(([w, m, k], rank) => {
   const kana = [...w].map(ch => KANA_BY_CH[ch]);
   const supported = kana.every(Boolean);
   const alts = supported
     ? kana.map(e => (e.ch === "ん" || e.ch === "ン") ? [...new Set([...e.answers, "nn"])] : e.answers)
     : [];
+  // In these greetings は is read "wa", so people type konnichiwa; accept that as well as konnichiha.
+  if (supported && WA_GREETINGS.has(w)) alts[alts.length - 1] = ["wa", ...alts[alts.length - 1]];
   let spellings = [""];
   alts.forEach(list => { spellings = spellings.flatMap(s => list.map(a => s + a)); });
   return {
