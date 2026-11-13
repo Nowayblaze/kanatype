@@ -1,18 +1,23 @@
 const kanaEl = document.getElementById("kana");
 const tipEl = document.getElementById("tip");
+const practiceEl = document.getElementById("practice");
 const answerEl = document.getElementById("answer");
 const feedbackEl = document.getElementById("feedback");
 const scoreEl = document.getElementById("score");
 const toggleBtn = document.getElementById("toggle");
-const allEl = document.getElementById("all");
-const tableEl = document.getElementById("table");
+const tabsEl = document.getElementById("tabs");
+const panelsEl = document.getElementById("panels");
+const groupEls = [...document.querySelectorAll(".toggles input")];
 
 const ROWS_KEY = "kanatype.rows";
+const TAB_KEY = "kanatype.tab";
 const LOCK_MS = 450;          // after a wrong answer, ignore keystrokes so fast typers don't overshoot
 const HOVER_REVEAL_MS = 350;  // hover delay before the answer is revealed (avoids accidental reveals)
 
 let selected = loadRows();
+let activeScript = loadScript();
 let running = false;
+let paused = false, pauseStart = 0;
 let current = null;
 let shownAt = 0;
 let missedThis = false;       // a miss (wrong answer or revealed answer) was already recorded for this kana
@@ -28,44 +33,80 @@ function loadRows() {
   try {
     const raw = JSON.parse(localStorage.getItem(ROWS_KEY));
     if (Array.isArray(raw)) {
-      const valid = raw.filter(id => ROWS.some(r => r.id === id));
+      // older saves used plain ids like "ka"; those were hiragana columns
+      const ids = raw.map(id => ROWS.some(r => r.id === id) ? id : "h-" + id);
+      const valid = ids.filter(id => ROWS.some(r => r.id === id));
       if (valid.length) return new Set(valid);
     }
   } catch (e) {}
-  return new Set(["a"]);
+  return new Set(["h-a"]);
+}
+function loadScript() {
+  try {
+    const s = localStorage.getItem(TAB_KEY);
+    if (SCRIPTS.some(x => x.id === s)) return s;
+  } catch (e) {}
+  return SCRIPTS[0].id;
 }
 function saveRows() {
   try { localStorage.setItem(ROWS_KEY, JSON.stringify([...selected])); } catch (e) {}
 }
 
-/* ---------- kana table (row picker + confidence in one) ---------- */
+/* ---------- kana table (column picker + confidence in one), one tab per script ---------- */
 function buildTable() {
-  tableEl.innerHTML = "";
-  ROWS.forEach(r => {
-    const head = document.createElement("label");
-    head.className = "colhead";
-    const cb = document.createElement("input");
-    cb.type = "checkbox";
-    cb.addEventListener("change", () => toggleRow(r.id, cb.checked));
-    head.append(cb, document.createTextNode(r.label));
-    tableEl.appendChild(head);
-    heads.set(r.id, cb);
-  });
-  for (let slot = 0; slot < 5; slot++) {
-    ROWS.forEach(r => {
-      const cell = document.createElement("div");
-      const idx = r.slots.indexOf(slot);
-      if (idx === -1) {
-        cell.className = "cell empty";
-      } else {
-        const [ch, ro] = r.kana[idx];
-        cell.className = "cell";
-        cell.innerHTML = '<div class="ch">' + ch + '</div><div class="ro">' + ro + "</div>";
-        cells.set(ch, cell);
-      }
-      tableEl.appendChild(cell);
+  tabsEl.innerHTML = "";
+  panelsEl.innerHTML = "";
+  SCRIPTS.forEach(s => {
+    const tab = document.createElement("button");
+    tab.type = "button";
+    tab.setAttribute("role", "tab");
+    tab.dataset.script = s.id;
+    tab.addEventListener("click", () => setTab(s.id));
+    tabsEl.appendChild(tab);
+
+    const panel = document.createElement("div");
+    panel.className = "table-scroll";
+    panel.dataset.script = s.id;
+    const table = document.createElement("div");
+    table.className = "table";
+    panel.appendChild(table);
+    panelsEl.appendChild(panel);
+
+    const firstDakuten = s.rows.findIndex(r => r.group === "dakuten");
+    const spacer = () => { const d = document.createElement("div"); d.className = "spacer"; table.appendChild(d); };
+
+    s.rows.forEach((r, i) => {
+      if (i === firstDakuten) spacer();
+      const head = document.createElement("label");
+      head.className = "colhead";
+      const cb = document.createElement("input");
+      cb.type = "checkbox";
+      cb.addEventListener("change", () => toggleRow(r.id, cb.checked));
+      head.append(cb, document.createTextNode(r.label));
+      table.appendChild(head);
+      heads.set(r.id, cb);
     });
-  }
+    for (let slot = 0; slot < 5; slot++) {
+      s.rows.forEach((r, i) => {
+        if (i === firstDakuten) spacer();
+        const cell = document.createElement("div");
+        const idx = r.slots.indexOf(slot);
+        if (idx === -1) {
+          cell.className = "cell empty";
+        } else {
+          const [ch, ro] = r.kana[idx];
+          cell.className = "cell";
+          cell.innerHTML = '<div class="ch">' + ch + '</div><div class="ro">' + ro + "</div>";
+          cells.set(ch, cell);
+        }
+        table.appendChild(cell);
+      });
+    }
+  });
+}
+
+function groupRows(script, group) {
+  return ROWS.filter(r => r.script === script && (group === "all" || r.group === group));
 }
 
 function updateTable() {
@@ -77,8 +118,27 @@ function updateTable() {
       cells.get(ch).className = "cell" + cls + (selected.has(r.id) ? "" : " off");
     });
   });
-  allEl.checked = selected.size === ROWS.length;
-  allEl.indeterminate = selected.size > 0 && selected.size < ROWS.length;
+  // tabs: label, selected state, and how many columns are ticked in that script
+  tabsEl.querySelectorAll("button").forEach(tab => {
+    const s = SCRIPTS.find(x => x.id === tab.dataset.script);
+    const n = s.rows.filter(r => selected.has(r.id)).length;
+    tab.setAttribute("aria-selected", s.id === activeScript);
+    tab.innerHTML = s.label + (n ? '<span class="badge">' + n + "</span>" : "");
+  });
+  panelsEl.querySelectorAll(".table-scroll").forEach(p => { p.hidden = p.dataset.script !== activeScript; });
+  // All / Regular / Dakuten toggles act on the visible script
+  groupEls.forEach(cb => {
+    const rows = groupRows(activeScript, cb.dataset.group);
+    const n = rows.filter(r => selected.has(r.id)).length;
+    cb.checked = n === rows.length;
+    cb.indeterminate = n > 0 && n < rows.length;
+  });
+}
+
+function setTab(id) {
+  activeScript = id;
+  try { localStorage.setItem(TAB_KEY, id); } catch (e) {}
+  updateTable();
 }
 
 function setRows(ids) {
@@ -93,7 +153,11 @@ function toggleRow(id, on) {
   if (on) next.add(id); else next.delete(id);
   setRows([...next]);
 }
-allEl.addEventListener("change", () => setRows(allEl.checked ? ROWS.map(r => r.id) : [ROWS[0].id]));
+groupEls.forEach(cb => cb.addEventListener("change", () => {
+  const next = new Set(selected);
+  groupRows(activeScript, cb.dataset.group).forEach(r => cb.checked ? next.add(r.id) : next.delete(r.id));
+  setRows([...next]);
+}));
 
 /* ---------- picking the next kana (weighted towards weak ones) ---------- */
 function pool() { return ALL_KANA.filter(k => selected.has(k.row)); }
@@ -188,7 +252,7 @@ function classify(val) {
 }
 
 answerEl.addEventListener("input", () => {
-  if (!running) return;
+  if (!running || paused) return;
   if (performance.now() < lockUntil) { answerEl.value = lockedValue; return; }
   const val = answerEl.value.trim().toLowerCase();
   if (!val) { answerEl.classList.remove("wrong"); return; }
@@ -200,7 +264,7 @@ answerEl.addEventListener("input", () => {
 
 /* hover (or tap) the kana to reveal the answer; counts as a miss */
 function reveal(pin) {
-  if (!running || !current) return;
+  if (!running || !current || paused) return;
   if (!missedThis) {
     markMiss();
     setFeedback("Answer revealed – counts as a miss. Type it to continue", true);
@@ -208,7 +272,7 @@ function reveal(pin) {
   showTip(pin);
 }
 kanaEl.addEventListener("mouseenter", () => {
-  if (running) hoverTimer = setTimeout(() => reveal(false), HOVER_REVEAL_MS);
+  if (running && !paused) hoverTimer = setTimeout(() => reveal(false), HOVER_REVEAL_MS);
 });
 kanaEl.addEventListener("mouseleave", () => { clearTimeout(hoverTimer); hideTip(false); });
 kanaEl.addEventListener("click", () => reveal(true)); // touch devices have no hover: tap keeps it shown
@@ -216,6 +280,8 @@ kanaEl.addEventListener("click", () => reveal(true)); // touch devices have no h
 /* ---------- start / stop ---------- */
 function start() {
   running = true;
+  paused = false;
+  practiceEl.classList.remove("paused");
   sessionCorrect = sessionTotal = 0;
   renderScore();
   toggleBtn.textContent = "Stop";
@@ -230,6 +296,8 @@ function start() {
 
 function stop() {
   running = false;
+  paused = false;
+  practiceEl.classList.remove("paused");
   clearTimeout(hoverTimer);
   toggleBtn.textContent = "Start";
   toggleBtn.classList.remove("stop");
@@ -252,7 +320,33 @@ function stop() {
 toggleBtn.addEventListener("click", () => running ? stop() : start());
 document.addEventListener("keydown", e => {
   if (e.key === "Escape" && running) stop();
-  else if (e.key === "Enter" && !running && e.target === document.body) start();
+  else if (e.key === "Enter" && e.target === document.body) { if (paused) resume(); else if (!running) start(); }
+});
+
+/* ---------- pause when the learner leaves the practice panel ---------- */
+// The kana and input blur out and a resume prompt appears. Paused time is not counted
+// towards the answer time, and hover-reveal is disabled so the answer can't be peeked at.
+function pause() {
+  if (!running || paused) return;
+  paused = true;
+  pauseStart = performance.now();
+  clearTimeout(hoverTimer);
+  practiceEl.classList.add("paused");
+  answerEl.blur();
+}
+function resume() {
+  if (!paused) return;
+  paused = false;
+  shownAt += performance.now() - pauseStart;
+  practiceEl.classList.remove("paused");
+  answerEl.focus();
+}
+document.addEventListener("mousedown", e => { if (running && !paused && !practiceEl.contains(e.target)) pause(); });
+window.addEventListener("blur", pause);
+document.addEventListener("visibilitychange", () => { if (document.hidden) pause(); });
+practiceEl.addEventListener("click", e => {
+  if (paused) resume();
+  else if (running && e.target !== toggleBtn) answerEl.focus(); // keep typing after clicking the kana
 });
 
 document.getElementById("reset").addEventListener("click", () => {

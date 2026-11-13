@@ -5,14 +5,26 @@
 }
 * { box-sizing: border-box; }
 body { margin: 0; background: var(--bg); color: var(--text); font-family: system-ui, sans-serif; }
-main { max-width: 760px; margin: 0 auto; padding: 16px; }
-h1 { font-style: italic; color: var(--muted); }
+main { max-width: 1240px; margin: 0 auto; padding: 12px 16px; }
+h1 { font-style: italic; color: var(--muted); margin: 0 0 12px; font-size: 1.6rem; }
+
+/* practice panel above the kana table */
+.layout { display: grid; gap: 16px; }
 h2 { font-size: 0.9rem; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin: 0; }
 section { background: var(--panel); border-radius: 8px; padding: 16px; margin-bottom: 16px; }
 .hint { color: var(--muted); font-size: .8rem; margin: 8px 0; }
 
 /* ---------- practice ---------- */
-#practice { text-align: center; }
+#practice { text-align: center; position: relative; }
+
+/* paused: kana and input blur out, with a resume prompt over them */
+#kana-wrap, #answer { transition: filter .15s, opacity .15s; }
+#practice.paused #kana-wrap, #practice.paused #answer { filter: blur(9px); opacity: .45; pointer-events: none; }
+#resume { display: none; position: absolute; left: 50%; top: 45%; transform: translate(-50%, -50%);
+  background: #2f333b; color: var(--text); border: 1px solid #555; padding: 10px 18px; box-shadow: 0 4px 16px rgba(0,0,0,.4);
+  width: max-content; max-width: 90%; white-space: normal; }
+#resume:hover, #resume:focus-visible { border-color: var(--accent); outline: none; }
+#practice.paused #resume { display: block; }
 #kana-wrap { position: relative; width: fit-content; margin: 40px auto 0; }
 #kana { font-size: 6.6rem; line-height: 1.2; cursor: help; user-select: none; }
 #kana.idle { opacity: .3; cursor: default; }
@@ -46,10 +58,18 @@ button { font: inherit; cursor: pointer; border-radius: 6px; }
 .primary:focus-visible, #reset:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
 
 /* ---------- kana table ---------- */
-.table-head { display: flex; justify-content: space-between; align-items: center; }
-.all { font-size: .85rem; color: var(--muted); cursor: pointer; }
+.toolbar { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
+#tabs { display: flex; gap: 4px; }
+#tabs button { background: var(--bg); color: var(--muted); border: 1px solid transparent; padding: 6px 14px; font-weight: 600; }
+#tabs button[aria-selected="true"] { color: var(--text); border-color: var(--accent); }
+#tabs button:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+#tabs .badge { margin-left: 6px; font-size: .7rem; background: var(--accent); color: #fff; border-radius: 9px; padding: 1px 6px; }
+.toggles { display: flex; gap: 14px; font-size: .85rem; color: var(--muted); }
+.toggles label { cursor: pointer; }
 .table-scroll { overflow-x: auto; padding-bottom: 4px; }
-#table { display: grid; grid-template-columns: repeat(11, minmax(48px, 1fr)); gap: 6px; min-width: 560px; }
+/* 11 regular columns, a thin spacer, then 5 dakuten columns */
+.table { display: grid; grid-template-columns: repeat(11, minmax(40px, 1fr)) 12px repeat(5, minmax(40px, 1fr)); gap: 6px; min-width: 700px; }
+.table .spacer { background: transparent; }
 .colhead { display: flex; align-items: center; justify-content: center; gap: 4px; padding: 6px 2px;
   font-size: .8rem; color: var(--muted); background: var(--bg); border-radius: 6px; cursor: pointer; user-select: none; }
 .cell { padding: 6px 2px; text-align: center; border-radius: 6px; background: var(--new); transition: opacity .15s; }

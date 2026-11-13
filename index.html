@@ -10,34 +10,41 @@
   <main>
     <h1>kanatype</h1>
 
-    <section id="practice">
-      <div id="kana-wrap">
-        <div id="tip" role="tooltip" aria-live="polite"></div>
-        <div id="kana" class="idle">かな</div>
-      </div>
-      <input id="answer" type="text" placeholder="Press Start" autocomplete="off" autocapitalize="off" spellcheck="false" disabled>
-      <div id="feedback" role="status" aria-live="polite"></div>
-      <div class="controls">
-        <button id="toggle" class="primary" type="button">Start</button>
-        <span id="score">0 / 0</span>
-      </div>
-      <p class="hint">Hover over the kana to reveal the answer (it counts as a miss). Press Esc to stop.</p>
-    </section>
+    <div class="layout">
+      <section id="practice">
+        <div id="kana-wrap">
+          <div id="tip" role="tooltip" aria-live="polite"></div>
+          <div id="kana" class="idle">かな</div>
+        </div>
+        <input id="answer" type="text" placeholder="Press Start" autocomplete="off" autocapitalize="off" spellcheck="false" disabled>
+        <div id="feedback" role="status" aria-live="polite"></div>
+        <div class="controls">
+          <button id="toggle" class="primary" type="button">Start</button>
+          <span id="score">0 / 0</span>
+        </div>
+        <p class="hint">Hover over the kana to reveal the answer (it counts as a miss). Press Esc to stop.</p>
+        <button id="resume" type="button">Paused &ndash; click or press Enter to resume</button>
+      </section>
 
-    <section>
-      <div class="table-head">
-        <h2>Kana</h2>
-        <label class="all"><input type="checkbox" id="all"> All</label>
-      </div>
-      <p class="hint">Tick a column to practice it. Colours show how well you know each kana.</p>
-      <div class="table-scroll"><div id="table"></div></div>
-      <div class="legend">
-        <span class="swatch s-new"></span>not enough data
-        <span class="swatch s-low"></span>weak
-        <span class="swatch s-mid"></span>getting there
-        <span class="swatch s-high"></span>strong
-      </div>
-    </section>
+      <section id="picker">
+        <div class="toolbar">
+          <div id="tabs" role="tablist" aria-label="Script"></div>
+          <div class="toggles">
+            <label><input type="checkbox" data-group="all"> All</label>
+            <label><input type="checkbox" data-group="regular"> Regular</label>
+            <label><input type="checkbox" data-group="dakuten"> Dakuten</label>
+          </div>
+        </div>
+        <div id="panels"></div>
+        <p class="hint">Tick columns to practice them &ndash; you can mix hiragana and katakana. Colours show how well you know each kana.</p>
+        <div class="legend">
+          <span class="swatch s-new"></span>not enough data
+          <span class="swatch s-low"></span>weak
+          <span class="swatch s-mid"></span>getting there
+          <span class="swatch s-high"></span>strong
+        </div>
+      </section>
+    </div>
 
     <button id="reset" type="button">Reset progress</button>
   </main>
