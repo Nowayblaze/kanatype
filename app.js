@@ -742,7 +742,15 @@ kanaEl.addEventListener("mouseenter", () => {
   if (running && !paused) hoverTimer = setTimeout(() => reveal(false), HOVER_REVEAL_MS);
 });
 kanaEl.addEventListener("mouseleave", () => { clearTimeout(hoverTimer); hideTip(false); });
-kanaEl.addEventListener("click", () => reveal(true)); // touch devices have no hover: tap keeps it shown
+// Text in the kana/word can be selected with the mouse (to copy it). A click that finishes a selection
+// must not count as a tap-to-reveal, and must not steal focus back to the answer box.
+function hasTextSelection() {
+  const s = window.getSelection();
+  return !!s && !s.isCollapsed && s.toString().length > 0 && document.activeElement !== answerEl;
+}
+kanaEl.addEventListener("click", () => { if (!hasTextSelection()) reveal(true); }); // touch devices have no hover: tap keeps it shown
+// Pressing the mouse on the word (to select it) cancels a pending hover-peek.
+kanaEl.addEventListener("mousedown", () => clearTimeout(hoverTimer));
 
 /* ---------- start / stop ---------- */
 function start() {
@@ -825,7 +833,7 @@ window.addEventListener("blur", pause);
 document.addEventListener("visibilitychange", () => { if (document.hidden) pause(); });
 practiceEl.addEventListener("click", e => {
   if (paused) resume();
-  else if (running && e.target !== toggleBtn) answerEl.focus(); // keep typing after clicking the kana
+  else if (running && e.target !== toggleBtn && !hasTextSelection()) answerEl.focus(); // keep typing after clicking the kana
 });
 
 document.getElementById("reset").addEventListener("click", () => {

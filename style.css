@@ -26,7 +26,7 @@ section { background: var(--panel); border-radius: 8px; padding: 16px; margin-bo
 #resume:hover, #resume:focus-visible { border-color: var(--accent); outline: none; }
 #practice.paused #resume { display: block; }
 #kana-wrap { position: relative; width: fit-content; max-width: 100%; margin: 40px auto 0; }
-#kana { font-size: 6.6rem; line-height: 1.2; cursor: help; user-select: none; }
+#kana { font-size: 6.6rem; line-height: 1.2; cursor: help; user-select: text; }
 #kana.idle { opacity: .3; cursor: default; }
 
 /* Kana | Words mode switch, styled like the Hiragana/Katakana tabs */
